@@ -41,5 +41,46 @@ namespace ZipAhoy.Tests
             }
         }
 
+
+
+        public static bool AreFoldersTheSame(string folderA, string folderB)
+        {
+            var a = Directory.EnumerateFileSystemEntries(folderA, "*", SearchOption.AllDirectories).GetEnumerator();
+            var b = Directory.EnumerateFileSystemEntries(folderB, "*", SearchOption.AllDirectories).GetEnumerator();
+
+            var aMore = a.MoveNext();
+            var bMore = b.MoveNext();
+            while(aMore && bMore)
+            {
+                var aName = a.Current;
+                var bName = b.Current;
+                if(0 != String.Compare(aName.Substring(folderA.Length), bName.Substring(folderB.Length), ignoreCase: true))
+                {
+                    return false;
+                }
+
+                var aLength = GetLength(aName);
+                var bLength = GetLength(bName);
+                if(aLength != bLength)
+                {
+                    return false;
+                }
+
+                aMore = a.MoveNext();
+                bMore = b.MoveNext();
+            }
+            return aMore == bMore;
+        }
+
+
+        private static long GetLength(string pathName)
+        {
+            var isDir = (File.GetAttributes(pathName) & FileAttributes.Directory) == FileAttributes.Directory;
+            if(isDir)
+            {
+                return -1;
+            }
+            return (new FileInfo(pathName)).Length;
+        }
     }
 }
