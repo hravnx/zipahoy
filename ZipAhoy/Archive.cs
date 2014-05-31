@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace ZipAhoy
@@ -16,6 +13,7 @@ namespace ZipAhoy
             {
                 throw new ArgumentNullException("folderPath");
             }
+
             if (String.IsNullOrWhiteSpace(archiveFilePath))
             {
                 throw new ArgumentNullException("archiveFilePath");
@@ -25,6 +23,9 @@ namespace ZipAhoy
             {
                 throw new ArgumentException(String.Format("'{0}' does not exist", folderPath), "folderPath");
             }
+
+
+
 
             using(var s = File.Create(archiveFilePath))
             {
