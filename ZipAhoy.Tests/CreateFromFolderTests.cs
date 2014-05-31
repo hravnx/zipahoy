@@ -10,7 +10,7 @@ namespace ZipAhoy.Tests
         [Fact]
         public void Create_with_bad_arguments_throws()
         {
-            foreach(var arg in new [] {null, "", "   \t   "})
+            foreach (var arg in new[] { null, "", "   \t   " })
             {
                 var ex = Assert.Throws<ArgumentNullException>(() => Archive.CreateFromFolder(arg, "well.zip"));
                 Assert.Equal("folderPath", ex.ParamName);
@@ -19,7 +19,7 @@ namespace ZipAhoy.Tests
                 Assert.Equal("archiveFilePath", ex.ParamName);
             }
         }
-        
+
         [Fact]
         public void Create_from_nonexisting_folder_throws()
         {
@@ -28,20 +28,37 @@ namespace ZipAhoy.Tests
         }
 
         [Fact]
-        public async Task Create_from_empty_folder_results_in_empty_zip_file()
+        public async Task Create_from_empty_folder_results_in_small_zip_file()
         {
-            using(var tempFolder = "zip-".CreateTempFolder())
+            using (var tempFolder = "zip-".CreateTempFolder())
             {
                 var zipPath = FileUtils.GetTempFilename(".zip");
                 await Archive.CreateFromFolder(tempFolder.FullPath, zipPath);
 
                 var info = new FileInfo(zipPath);
                 Assert.True(info.Exists);
-                Assert.Equal(0, info.Length);
+                Assert.Equal(22, info.Length);
 
                 info.Delete();
             }
         }
-        
+
+        [Fact]
+        public async Task Create_from_non_empty_folder_results_in_nonempty_zip_file()
+        {
+            using (var tempFolder = "zip-".CreateTempFolder())
+            {
+                var zipPath = FileUtils.GetTempFilename(".zip");
+                tempFolder.CreateDummyFile("dummy.bin", 234);
+                await Archive.CreateFromFolder(tempFolder.FullPath, zipPath);
+
+                var info = new FileInfo(zipPath);
+                Assert.True(info.Exists);
+                Assert.True(info.Length > 0);
+
+                info.Delete();
+            }
+        }
+
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Threading.Tasks;
 
 namespace ZipAhoy
@@ -24,13 +25,8 @@ namespace ZipAhoy
                 throw new ArgumentException(String.Format("'{0}' does not exist", folderPath), "folderPath");
             }
 
+            ZipFile.CreateFromDirectory(folderPath, archiveFilePath);
 
-
-
-            using(var s = File.Create(archiveFilePath))
-            {
-
-            }
             return Task.FromResult(true);
         }
     }

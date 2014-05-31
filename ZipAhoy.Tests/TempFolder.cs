@@ -20,6 +20,10 @@ namespace ZipAhoy.Tests
             Directory.CreateDirectory(FullPath);
         }
 
+        public void CreateDummyFile(string relativePath, int size)
+        {
+            FileUtils.CreateDummyFile(Path.Combine(FullPath, relativePath), size);
+        }
 
         public void Dispose()
         {
@@ -37,5 +41,7 @@ namespace ZipAhoy.Tests
                 }
             }
         }
+
+
     }
 }
