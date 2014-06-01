@@ -7,7 +7,6 @@ namespace ZipAhoy
 {
     public class Archive
     {
-
         public static Task CreateFromFolder(string folderPath, string archiveFilePath)
         {
             if (String.IsNullOrWhiteSpace(folderPath))

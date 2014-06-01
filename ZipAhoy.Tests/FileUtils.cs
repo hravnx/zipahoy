@@ -6,7 +6,6 @@ namespace ZipAhoy.Tests
 {
     public static class FileUtils
     {
-
         public static TempFolder CreateTempFolder(this string prefix)
         {
             return new TempFolder(prefix);
@@ -24,7 +23,6 @@ namespace ZipAhoy.Tests
             }
             return Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D") + ext);
         }
-
 
         public static bool FolderIsEmpty(string folderPath)
         {
@@ -50,8 +48,6 @@ namespace ZipAhoy.Tests
                 Assert.Equal(size, stream.Length);
             }
         }
-
-
 
         public static bool AreFoldersTheSame(string folderA, string folderB)
         {
@@ -81,7 +77,6 @@ namespace ZipAhoy.Tests
             }
             return aMore == bMore;
         }
-
 
         private static long GetLength(string pathName)
         {
