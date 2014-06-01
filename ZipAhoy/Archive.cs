@@ -29,7 +29,7 @@ namespace ZipAhoy
             return CreateFromDirectoryHelper(folderPath, archiveFilePath, progress);
         }
 
-        public static Task ExtractToFolder(string archiveFilePath, string folderPath)
+        public static Task ExtractToFolder(string archiveFilePath, string folderPath, IProgress<float> progress)
         {
             if (String.IsNullOrWhiteSpace(archiveFilePath))
             {
@@ -48,10 +48,8 @@ namespace ZipAhoy
             {
                 Directory.CreateDirectory(folderPath);
             }
-            return Task.Run(() =>
-            {
-                ZipFile.ExtractToDirectory(archiveFilePath, folderPath);
-            });
+
+            return ExtractToDirectoryHelper(archiveFilePath, folderPath, progress);
         }
 
         private static Task CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, IProgress<float> progress)
@@ -99,6 +97,47 @@ namespace ZipAhoy
                                 // create entry for empty folder
                                 zipArchive.CreateEntry(string.Concat(entryName, Path.DirectorySeparatorChar));
                             }
+                        }
+                    }
+                }
+            });
+        }
+
+        private static Task ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath, IProgress<float> progress)
+        {
+            var destRootPath = Path.GetFullPath(destFolderPath);
+
+            return Task.Run(() =>
+            {
+                using (var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Read, Encoding.UTF8))
+                {
+                    var currentBytes = 0L;
+
+                    // inital run through of the directory, getting the total number of bytes to extract
+                    var totalBytes = zipArchive.Entries.Sum(entry => entry.Length);
+
+                    // second run through, actually extracting entries
+                    foreach (var entry in zipArchive.Entries)
+                    {
+                        var destPath = Path.Combine(destRootPath, entry.FullName);
+                        // file or directory?
+                        if (Path.GetFileName(destPath).Length != 0)
+                        {
+                            // it's a file, so create its containing folder(s) ...
+                            Directory.CreateDirectory(Path.GetDirectoryName(destPath));
+                            // ... and extract it
+                            using (var dest = File.Open(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                            using (var source = entry.Open())
+                            {
+                                currentBytes += StreamCopyHelper(source, dest, progress, totalBytes, currentBytes);
+                            }
+                            File.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
+                        }
+                        else
+                        {
+                            // it's an empty directory, so simply create it
+                            Directory.CreateDirectory(destPath);
+                            Directory.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
                         }
                     }
                 }

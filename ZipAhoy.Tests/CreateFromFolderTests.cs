@@ -56,7 +56,6 @@ namespace ZipAhoy.Tests
             }
         }
 
-
         [Fact]
         public async Task Create_reports_granular_progress()
         {
@@ -74,10 +73,5 @@ namespace ZipAhoy.Tests
                 Assert.Equal(1.0f, progress.ReportedProgress.Last());
             }
         }
-        
-
-
-
-
     }
 }
