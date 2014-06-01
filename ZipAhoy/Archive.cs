@@ -3,6 +3,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ZipAhoy
@@ -29,7 +30,7 @@ namespace ZipAhoy
             return CreateFromDirectoryHelper(folderPath, archiveFilePath, progress);
         }
 
-        public static Task ExtractToFolder(string archiveFilePath, string folderPath, IProgress<float> progress)
+        public static Task ExtractToFolder(string archiveFilePath, string folderPath, IProgress<float> progress, CancellationToken cancelToken)
         {
             if (String.IsNullOrWhiteSpace(archiveFilePath))
             {
@@ -49,7 +50,7 @@ namespace ZipAhoy
                 Directory.CreateDirectory(folderPath);
             }
 
-            return ExtractToDirectoryHelper(archiveFilePath, folderPath, progress);
+            return ExtractToDirectoryHelper(archiveFilePath, folderPath, progress, cancelToken);
         }
 
         private static Task CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, IProgress<float> progress)
@@ -86,7 +87,7 @@ namespace ZipAhoy
                                 entry.LastWriteTime = sourceInfo.GetLastWriteTime();
                                 using (var destination = entry.Open())
                                 {
-                                    currentBytes += StreamCopyHelper(source, destination, progress, totalBytes, currentBytes);
+                                    currentBytes += StreamCopyHelper(source, destination, progress, totalBytes, currentBytes, CancellationToken.None);
                                 }
                             }
                         }
@@ -103,12 +104,14 @@ namespace ZipAhoy
             });
         }
 
-        private static Task ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath, IProgress<float> progress)
+        private static Task ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath, IProgress<float> progress, CancellationToken cancelToken)
         {
             var destRootPath = Path.GetFullPath(destFolderPath);
 
             return Task.Run(() =>
             {
+                cancelToken.ThrowIfCancellationRequested();
+
                 using (var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Read, Encoding.UTF8))
                 {
                     var currentBytes = 0L;
@@ -119,6 +122,8 @@ namespace ZipAhoy
                     // second run through, actually extracting entries
                     foreach (var entry in zipArchive.Entries)
                     {
+                        cancelToken.ThrowIfCancellationRequested();
+
                         var destPath = Path.Combine(destRootPath, entry.FullName);
                         // file or directory?
                         if (Path.GetFileName(destPath).Length != 0)
@@ -129,7 +134,7 @@ namespace ZipAhoy
                             using (var dest = File.Open(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
                             using (var source = entry.Open())
                             {
-                                currentBytes += StreamCopyHelper(source, dest, progress, totalBytes, currentBytes);
+                                currentBytes += StreamCopyHelper(source, dest, progress, totalBytes, currentBytes, cancelToken);
                             }
                             File.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
                         }
@@ -144,7 +149,7 @@ namespace ZipAhoy
             });
         }
 
-        private static long StreamCopyHelper(Stream source, Stream destination, IProgress<float> progress, long totalBytes, long currentBytes)
+        private static long StreamCopyHelper(Stream source, Stream destination, IProgress<float> progress, long totalBytes, long currentBytes, CancellationToken cancelToken)
         {
             const int BUFFER_SIZE = 81920; // just below the LOH threshold
             var buffer = new byte[BUFFER_SIZE];
@@ -152,12 +157,16 @@ namespace ZipAhoy
             var bytesRead = source.Read(buffer, 0, BUFFER_SIZE);
             while (bytesRead > 0)
             {
+                cancelToken.ThrowIfCancellationRequested();
                 destination.Write(buffer, 0, bytesRead);
+
                 totalCopied += bytesRead;
                 if (progress != null)
                 {
                     progress.Report((currentBytes + totalCopied) / (float)totalBytes);
                 }
+
+                cancelToken.ThrowIfCancellationRequested();
                 bytesRead = source.Read(buffer, 0, BUFFER_SIZE);
             }
 

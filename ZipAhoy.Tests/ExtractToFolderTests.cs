@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -13,10 +14,10 @@ namespace ZipAhoy.Tests
         {
             foreach (var arg in new[] { null, "", "   \t   " })
             {
-                var ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder(arg, "some stuff", null));
+                var ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder(arg, "some stuff", null, CancellationToken.None));
                 Assert.Equal("archiveFilePath", ex.ParamName);
 
-                ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder("well.zip", arg, null));
+                ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder("well.zip", arg, null, CancellationToken.None));
                 Assert.Equal("folderPath", ex.ParamName);
             }
         }
@@ -24,9 +25,8 @@ namespace ZipAhoy.Tests
         [Fact]
         public void Extract_from_non_existing_zip_file_throws()
         {
-            var ex = Assert.Throws<ArgumentException>(() => Archive.ExtractToFolder(Guid.NewGuid().ToString("D") + ".zip", "some stuff", null));
+            var ex = Assert.Throws<ArgumentException>(() => Archive.ExtractToFolder(Guid.NewGuid().ToString("D") + ".zip", "some stuff", null, CancellationToken.None));
             Assert.Equal("archiveFilePath", ex.ParamName);
-
         }
 
         [Fact]
@@ -41,7 +41,7 @@ namespace ZipAhoy.Tests
 
                 using (var tempFolder = "zip-".CreateTempFolder())
                 {
-                    await Archive.ExtractToFolder(zipFile.FilePath, tempFolder.FullPath, null);
+                    await Archive.ExtractToFolder(zipFile.FilePath, tempFolder.FullPath, null, CancellationToken.None);
                     Assert.True(FileUtils.FolderIsEmpty(tempFolder.FullPath));
                 }
             }
@@ -58,9 +58,9 @@ namespace ZipAhoy.Tests
 
                 await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
 
-                using(var destFolder = "zip-".CreateTempFolder())
+                using (var destFolder = "zip-".CreateTempFolder())
                 {
-                    await Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, null);
+                    await Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, null, CancellationToken.None);
 
                     Assert.True(FileUtils.AreFoldersTheSame(tempFolder.FullPath, destFolder.FullPath));
                 }
@@ -83,16 +83,40 @@ namespace ZipAhoy.Tests
 
                 using (var destFolder = "zip-".CreateTempFolder())
                 {
-                    await Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, progress);
+                    await Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, progress, CancellationToken.None);
 
                     Assert.Equal(3, progress.ReportedProgress.Count);
                     Assert.Equal(1.0f, progress.ReportedProgress.Last());
                 }
-
             }
-
         }
-        
 
+        [Fact]
+        public async Task Extract_can_be_cancelled()
+        {
+            using (var zipFile = TempFile.Create("zip-", ".zip"))
+            {
+                using (var tempFolder = "zip-".CreateTempFolder())
+                {
+                    tempFolder.CreateDummyFile("dummy1.bin", 234);
+                    tempFolder.CreateDummyFile("dummy2.bin", 345);
+                    tempFolder.CreateDummyFile("dummy3.bin", 456);
+                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
+                }
+
+                var cts = new CancellationTokenSource();
+                var progress = new TestCancelProgressReporter(2, cts);
+
+                using (var destFolder = "zip-".CreateTempFolder())
+                {
+                    var ex = Assert.Throws<AggregateException>(() =>
+                        Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, progress, cts.Token).Wait());
+                    Assert.Equal(1, ex.InnerExceptions.Count);
+                    Assert.IsType<OperationCanceledException>(ex.InnerExceptions[0]);
+
+                    Assert.Equal(2, progress.ReportCount);
+                }
+            }
+        }
     }
 }
