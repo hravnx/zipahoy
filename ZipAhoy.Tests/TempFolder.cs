@@ -22,7 +22,10 @@ namespace ZipAhoy.Tests
 
         public void CreateDummyFile(string relativePath, int size)
         {
-            FileUtils.CreateDummyFile(Path.Combine(FullPath, relativePath), size);
+            var fullPath = Path.GetFullPath(Path.Combine(FullPath, relativePath));
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+
+            FileUtils.CreateDummyFile(fullPath, size);
         }
 
         public void Dispose()
