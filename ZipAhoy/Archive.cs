@@ -10,7 +10,7 @@ namespace ZipAhoy
 {
     public static class Archive
     {
-        public static Task CreateFromFolder(string folderPath, string archiveFilePath, IProgress<float> progress)
+        public static Task CreateFromFolder(string folderPath, string archiveFilePath, IProgress<float> progress, CancellationToken cancelToken)
         {
             if (String.IsNullOrWhiteSpace(folderPath))
             {
@@ -27,7 +27,7 @@ namespace ZipAhoy
                 throw new ArgumentException(String.Format("'{0}' does not exist", folderPath), "folderPath");
             }
 
-            return CreateFromDirectoryHelper(folderPath, archiveFilePath, progress);
+            return CreateFromDirectoryHelper(folderPath, archiveFilePath, progress, cancelToken);
         }
 
         public static Task ExtractToFolder(string archiveFilePath, string folderPath, IProgress<float> progress, CancellationToken cancelToken)
@@ -53,7 +53,7 @@ namespace ZipAhoy
             return ExtractToDirectoryHelper(archiveFilePath, folderPath, progress, cancelToken);
         }
 
-        private static Task CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, IProgress<float> progress)
+        private static Task CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, IProgress<float> progress, CancellationToken cancelToken)
         {
             sourcePath = Path.GetFullPath(sourcePath);
             archiveFilePath = Path.GetFullPath(archiveFilePath);
@@ -73,9 +73,11 @@ namespace ZipAhoy
                         .EnumerateFiles("*", SearchOption.AllDirectories)
                         .Sum(fi => fi.Length);
                     var currentBytes = 0L;
-
+                    cancelToken.ThrowIfCancellationRequested();
                     foreach (var info in directoryInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
                     {
+                        cancelToken.ThrowIfCancellationRequested();
+
                         int length = info.FullName.Length - sourcePath.Length;
                         var entryName = info.FullName.Substring(sourcePath.Length, length).TrimStart(folderSeparators);
                         if (info is FileInfo)
@@ -87,7 +89,7 @@ namespace ZipAhoy
                                 entry.LastWriteTime = sourceInfo.GetLastWriteTime();
                                 using (var destination = entry.Open())
                                 {
-                                    currentBytes += StreamCopyHelper(source, destination, progress, totalBytes, currentBytes, CancellationToken.None);
+                                    currentBytes += StreamCopyHelper(source, destination, progress, totalBytes, currentBytes, cancelToken);
                                 }
                             }
                         }

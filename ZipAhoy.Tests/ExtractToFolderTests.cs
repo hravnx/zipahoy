@@ -36,7 +36,7 @@ namespace ZipAhoy.Tests
             {
                 using (var tempFolder = "zip-".CreateTempFolder())
                 {
-                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
+                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
                 }
 
                 using (var tempFolder = "zip-".CreateTempFolder())
@@ -56,7 +56,7 @@ namespace ZipAhoy.Tests
                 tempFolder.CreateDummyFile("dar\\dummy.bin", 421);
                 tempFolder.CreateDummyFile("dummy.bin", 234);
 
-                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
+                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
 
                 using (var destFolder = "zip-".CreateTempFolder())
                 {
@@ -76,7 +76,7 @@ namespace ZipAhoy.Tests
                 {
                     tempFolder.CreateDummyFile("dummy.bin", 234);
                     tempFolder.CreateDummyFile("dummy2.bin", 143000);
-                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
+                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
                 }
 
                 var progress = new TestProgressReporter();
@@ -92,7 +92,7 @@ namespace ZipAhoy.Tests
         }
 
         [Fact]
-        public async Task Extract_can_be_cancelled()
+        public async Task Extract_can_be_canceled()
         {
             using (var zipFile = TempFile.Create("zip-", ".zip"))
             {
@@ -101,7 +101,7 @@ namespace ZipAhoy.Tests
                     tempFolder.CreateDummyFile("dummy1.bin", 234);
                     tempFolder.CreateDummyFile("dummy2.bin", 345);
                     tempFolder.CreateDummyFile("dummy3.bin", 456);
-                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
+                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
                 }
 
                 var cts = new CancellationTokenSource();
