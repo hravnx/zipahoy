@@ -28,18 +28,16 @@ namespace ZipAhoy.Tests
         }
 
         [Fact]
-        public async Task Create_from_empty_folder_results_in_small_zip_file()
+        public async Task Create_from_empty_folder_results_in_minimal_zip_file()
         {
             using (var tempFolder = "zip-".CreateTempFolder())
+            using (var zipFile = TempFile.Create("zip-", ".zip"))
             {
-                var zipPath = FileUtils.GetTempFilename(".zip");
-                await Archive.CreateFromFolder(tempFolder.FullPath, zipPath);
-
-                var info = new FileInfo(zipPath);
+                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath);
+                
+                var info = zipFile.GetInfo();
                 Assert.True(info.Exists);
                 Assert.Equal(22, info.Length);
-
-                info.Delete();
             }
         }
 
@@ -47,18 +45,18 @@ namespace ZipAhoy.Tests
         public async Task Create_from_non_empty_folder_results_in_nonempty_zip_file()
         {
             using (var tempFolder = "zip-".CreateTempFolder())
+            using (var zipFile = TempFile.Create("zip-", ".zip"))
             {
-                var zipPath = FileUtils.GetTempFilename(".zip");
                 tempFolder.CreateDummyFile("dummy.bin", 234);
-                await Archive.CreateFromFolder(tempFolder.FullPath, zipPath);
+                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath);
 
-                var info = new FileInfo(zipPath);
+                var info = zipFile.GetInfo();
                 Assert.True(info.Exists);
                 Assert.True(info.Length > 0);
-
-                info.Delete();
             }
         }
+
+
 
     }
 }

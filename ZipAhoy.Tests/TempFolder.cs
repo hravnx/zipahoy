@@ -34,6 +34,7 @@ namespace ZipAhoy.Tests
                 try
                 {
                     Directory.Delete(FullPath, true);
+                    return;
                 }
                 catch (IOException)
                 {

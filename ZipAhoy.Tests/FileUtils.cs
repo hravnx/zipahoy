@@ -25,6 +25,16 @@ namespace ZipAhoy.Tests
             return Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D") + ext);
         }
 
+
+        public static bool FolderIsEmpty(string folderPath)
+        {
+            foreach(var entry in Directory.EnumerateFileSystemEntries(folderPath, "*"))
+            {
+                return false;
+            }
+            return true;
+        }
+
         public static void CreateDummyFile(string filepath, int size)
         {
             using (var stream = new FileStream(filepath, FileMode.Create, FileAccess.Write, FileShare.None))
