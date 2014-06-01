@@ -7,7 +7,9 @@ Although there are already high-level helper methods for this in the System.IO.C
 ZipAhoy adds these things in two simple high-level static methods.
 
 ### How to install
-Just grab the source, and add the ZipAhoy class library to your project. A nuget package may be forthcoming. If you want to run the tests, you need to install the XUnit test runner Visual Studio extension.
+There is a nuget package, called ZipAhoy.
+
+Alternatively, grab the source, and add the ZipAhoy class library to your project. If you want to run the tests, you need to install the XUnit test runner Visual Studio extension.
 
 ### Examples
 There are usage examples in the ZipAhoy.Tests project.
