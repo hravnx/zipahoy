@@ -35,7 +35,7 @@ namespace ZipAhoy.Tests
             {
                 using (var tempFolder = "zip-".CreateTempFolder())
                 {
-                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath);
+                    await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
                 }
 
                 using (var tempFolder = "zip-".CreateTempFolder())
@@ -53,7 +53,7 @@ namespace ZipAhoy.Tests
             using (var zipFile = TempFile.Create("zip-", ".zip"))
             {
                 tempFolder.CreateDummyFile("dummy.bin", 234);
-                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath);
+                await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null);
 
                 using(var destFolder = "zip-".CreateTempFolder())
                 {
