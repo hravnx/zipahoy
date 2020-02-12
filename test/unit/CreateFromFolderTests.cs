@@ -9,23 +9,23 @@ namespace ZipAhoy.Tests
     public class CreateFromFolderTests
     {
         [Fact]
-        public void Create_with_bad_arguments_throws()
+        public async Task Create_with_bad_arguments_throws()
         {
             foreach (var arg in new[] { null, "", "   \t   " })
             {
-                var ex = Assert.Throws<ArgumentNullException>(() => Archive.CreateFromFolder(arg, "well.zip", null, CancellationToken.None));
+                var ex = await Assert.ThrowsAsync<ArgumentNullException>(() => Archive.CreateFromFolder(arg, "well.zip", null, CancellationToken.None));
                 Assert.Equal("folderPath", ex.ParamName);
 
-                ex = Assert.Throws<ArgumentNullException>(() => Archive.CreateFromFolder("somestuff", arg, null, CancellationToken.None));
+                ex = await Assert.ThrowsAsync<ArgumentNullException>(() => Archive.CreateFromFolder("somestuff", arg, null, CancellationToken.None));
                 Assert.Equal("archiveFilePath", ex.ParamName);
             }
         }
 
         [Fact]
-        public void Create_from_nonexisting_folder_throws()
+        public async Task Create_from_nonexisting_folder_throws()
         {
             var name = FileUtils.GetTempFilename(".tmp");
-            Assert.Throws<ArgumentException>(() => Archive.CreateFromFolder(name, "well.zip", null, CancellationToken.None));
+            await Assert.ThrowsAsync<ArgumentException>(() => Archive.CreateFromFolder(name, "well.zip", null, CancellationToken.None));
         }
 
         [Fact]
@@ -35,7 +35,7 @@ namespace ZipAhoy.Tests
             using (var zipFile = TempFile.Create("zip-", ".zip"))
             {
                 await Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
-                
+
                 var info = zipFile.GetInfo();
                 Assert.True(info.Exists);
                 Assert.Equal(22, info.Length);
@@ -90,12 +90,12 @@ namespace ZipAhoy.Tests
 
                 var ex = Assert.Throws<AggregateException>(() =>
                         Archive.CreateFromFolder(tempFolder.FullPath, zipFile.FilePath, progress, cts.Token).Wait());
-                Assert.Equal(1, ex.InnerExceptions.Count);
+                Assert.Single(ex.InnerExceptions);
                 Assert.IsType<OperationCanceledException>(ex.InnerExceptions[0]);
 
                 Assert.Equal(2, progress.ReportCount);
             }
         }
-        
+
     }
 }

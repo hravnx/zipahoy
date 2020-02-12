@@ -35,11 +35,11 @@ namespace ZipAhoy.Tests
         /// <returns>A newly created <c>TempFile</c> instance</returns>
         public static TempFile CreateInFolder(string rootFolder, string prefix = "", string extension = ".tmp")
         {
-            if(String.IsNullOrWhiteSpace(rootFolder))
+            if (String.IsNullOrWhiteSpace(rootFolder))
             {
                 throw new ArgumentNullException("rootFolder", "'rootFolder' cannot be null or empty, maybe you want the Create static factory method instead?");
             }
-            if(!Directory.Exists(rootFolder))
+            if (!Directory.Exists(rootFolder))
             {
                 throw new ArgumentException(String.Format("Folder '{0}' does not exist", rootFolder), "rootFolder");
 

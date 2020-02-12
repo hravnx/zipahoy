@@ -10,22 +10,22 @@ namespace ZipAhoy.Tests
     public class ExtractToFolderTests
     {
         [Fact]
-        public void Extract_with_bad_arguments_throws()
+        public async Task Extract_with_bad_arguments_throws()
         {
             foreach (var arg in new[] { null, "", "   \t   " })
             {
-                var ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder(arg, "some stuff", null, CancellationToken.None));
+                var ex = await Assert.ThrowsAsync<ArgumentNullException>(() => Archive.ExtractToFolder(arg, "some stuff", null, CancellationToken.None));
                 Assert.Equal("archiveFilePath", ex.ParamName);
 
-                ex = Assert.Throws<ArgumentNullException>(() => Archive.ExtractToFolder("well.zip", arg, null, CancellationToken.None));
+                ex = await Assert.ThrowsAsync<ArgumentNullException>(() => Archive.ExtractToFolder("well.zip", arg, null, CancellationToken.None));
                 Assert.Equal("folderPath", ex.ParamName);
             }
         }
 
         [Fact]
-        public void Extract_from_non_existing_zip_file_throws()
+        public async Task Extract_from_non_existing_zip_file_throws()
         {
-            var ex = Assert.Throws<ArgumentException>(() => Archive.ExtractToFolder(Guid.NewGuid().ToString("D") + ".zip", "some stuff", null, CancellationToken.None));
+            var ex = await Assert.ThrowsAsync<ArgumentException>(() => Archive.ExtractToFolder(Guid.NewGuid().ToString("D") + ".zip", "some stuff", null, CancellationToken.None));
             Assert.Equal("archiveFilePath", ex.ParamName);
         }
 
@@ -111,7 +111,7 @@ namespace ZipAhoy.Tests
                 {
                     var ex = Assert.Throws<AggregateException>(() =>
                         Archive.ExtractToFolder(zipFile.FilePath, destFolder.FullPath, progress, cts.Token).Wait());
-                    Assert.Equal(1, ex.InnerExceptions.Count);
+                    Assert.Single(ex.InnerExceptions);
                     Assert.IsType<OperationCanceledException>(ex.InnerExceptions[0]);
 
                     Assert.Equal(2, progress.ReportCount);
