@@ -6,6 +6,8 @@
 *.user
 *.sln.docstates
 
+.ionide/
+
 # Build results
 
 [Dd]ebug/
