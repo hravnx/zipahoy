@@ -1,52 +1,57 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
+
 using Xunit;
 
 namespace ZipAhoy.Tests
 {
+    using Helpers;
+
+    public static class ActionHelper
+    {
+        public static Action Run(Action action) => action;
+
+        public static void WithRetriesOn<T>(this Action tryThis, int count = 10) where T : Exception
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                try
+                {
+                    tryThis();
+                    return;
+                }
+                catch (T)
+                {
+                    Thread.Sleep(10);
+                }
+            }
+        }
+    }
+
     public static class FileUtils
     {
-        public static TempFolder CreateTempFolder(this string prefix)
-        {
-            return new TempFolder(prefix);
-        }
+        public static TempFolder CreateTempFolder(this string prefix) => new TempFolder(prefix);
 
         public static string GetTempFilename(string ext)
         {
-            if (String.IsNullOrWhiteSpace(ext))
-            {
-                throw new ArgumentNullException("ext");
-            }
-            if (ext[0] != '.')
-            {
-                ext = "." + ext;
-            }
-            return Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D") + ext);
-        }
-
-        public static bool FolderIsEmpty(string folderPath)
-        {
-            foreach(var entry in Directory.EnumerateFileSystemEntries(folderPath, "*"))
-            {
-                return false;
-            }
-            return true;
+            Require.IsNotBlank(ext, nameof(ext));
+            var basePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D"));
+            return Path.ChangeExtension(basePath, ext);
         }
 
         public static void CreateDummyFile(string filepath, int size)
         {
-            using (var stream = new FileStream(filepath, FileMode.Create, FileAccess.Write, FileShare.None))
+            using var stream = new FileStream(filepath, FileMode.Create, FileAccess.Write, FileShare.None);
+            var buffer = new byte[Math.Min(4096, size)];
+            var bytesWritten = 0;
+            while (bytesWritten < size)
             {
-                var buffer = new byte[Math.Min(4096, size)];
-                var bytesWritten = 0;
-                while (bytesWritten < size)
-                {
-                    var bytesToWrite = Math.Min(buffer.Length, size - bytesWritten);
-                    stream.Write(buffer, 0, bytesToWrite);
-                    bytesWritten += bytesToWrite;
-                }
-                Assert.Equal(size, stream.Length);
+                var bytesToWrite = Math.Min(buffer.Length, size - bytesWritten);
+                stream.Write(buffer, 0, bytesToWrite);
+                bytesWritten += bytesToWrite;
             }
+            Assert.Equal(size, stream.Length);
         }
 
         public static bool AreFoldersTheSame(string folderA, string folderB)
@@ -56,18 +61,19 @@ namespace ZipAhoy.Tests
 
             var aMore = a.MoveNext();
             var bMore = b.MoveNext();
-            while(aMore && bMore)
+            while (aMore && bMore)
             {
                 var aName = a.Current;
                 var bName = b.Current;
-                if(0 != String.Compare(aName.Substring(folderA.Length), bName.Substring(folderB.Length), ignoreCase: true))
+
+                if (0 != String.Compare(aName.Substring(folderA.Length), bName.Substring(folderB.Length), ignoreCase: true))
                 {
                     return false;
                 }
 
                 var aLength = GetLength(aName);
                 var bLength = GetLength(bName);
-                if(aLength != bLength)
+                if (aLength != bLength)
                 {
                     return false;
                 }
@@ -80,8 +86,9 @@ namespace ZipAhoy.Tests
 
         private static long GetLength(string pathName)
         {
+
             var isDir = (File.GetAttributes(pathName) & FileAttributes.Directory) == FileAttributes.Directory;
-            if(isDir)
+            if (isDir)
             {
                 return -1;
             }

@@ -8,190 +8,149 @@ using System.Threading.Tasks;
 
 namespace ZipAhoy
 {
+    using Helpers;
+
     public static class Archive
     {
-        public static Task CreateFromFolder(string folderPath, string archiveFilePath, IProgress<float> progress, CancellationToken cancelToken)
+        /// <summary>
+        /// Zips the file sin a folder, including sub-folders.
+        /// </summary>
+        /// <param name="folderPath">The directory to zip</param>
+        /// <param name="archiveFilePath">The path of the resulting zip archive</param>
+        /// <param name="progress">Optional progress action</param>
+        /// <param name="token">Optional cancellation token</param>
+        /// <returns>Nothing</returns>
+        public static Task CreateFromFolderAsync(string folderPath, string archiveFilePath,
+                                                 Action<float> progress = default, CancellationToken token = default)
         {
-            if (String.IsNullOrWhiteSpace(folderPath))
-            {
-                throw new ArgumentNullException("folderPath");
-            }
+            Require.IsNotBlank(folderPath, nameof(folderPath));
+            Require.IsNotBlank(archiveFilePath, nameof(archiveFilePath));
+            Require.FolderExists(folderPath, nameof(folderPath));
 
-            if (String.IsNullOrWhiteSpace(archiveFilePath))
-            {
-                throw new ArgumentNullException("archiveFilePath");
-            }
-
-            if (!Directory.Exists(folderPath))
-            {
-                throw new ArgumentException(String.Format("'{0}' does not exist", folderPath), "folderPath");
-            }
-
-            return CreateFromDirectoryHelper(folderPath, archiveFilePath, progress, cancelToken);
+            return Task.Run(() => CreateFromDirectoryHelper(folderPath, archiveFilePath, progress, token));
         }
 
-        public static Task ExtractToFolder(string archiveFilePath, string folderPath, IProgress<float> progress, CancellationToken cancelToken)
+        /// <summary>
+        /// Unzips a zip archive to a specified folder
+        /// </summary>
+        /// <param name="archiveFilePath">The zip archive to unzip</param>
+        /// <param name="destFolderPath">The folder to unpack the zip file in</param>
+        /// <param name="progress">Optional progress action</param>
+        /// <param name="token">Optional cancellation token</param>
+        /// <returns>Nothing</returns>
+        public static Task ExtractToFolderAsync(string archiveFilePath, string destFolderPath,
+                                                Action<float> progress = default, CancellationToken token = default)
         {
-            if (String.IsNullOrWhiteSpace(archiveFilePath))
-            {
-                throw new ArgumentNullException("archiveFilePath");
-            }
-            if (String.IsNullOrWhiteSpace(folderPath))
-            {
-                throw new ArgumentNullException("folderPath");
-            }
-            if (!File.Exists(archiveFilePath))
-            {
-                throw new ArgumentException(String.Format("'{0}' does not exist", archiveFilePath), "archiveFilePath");
-            }
+            Require.IsNotBlank(archiveFilePath, nameof(archiveFilePath));
+            Require.IsNotBlank(destFolderPath, nameof(destFolderPath));
+            Require.FileExists(archiveFilePath, nameof(archiveFilePath));
+            Require.FolderExists(destFolderPath, nameof(destFolderPath));
 
-            if (!Directory.Exists(folderPath))
-            {
-                Directory.CreateDirectory(folderPath);
-            }
-
-            return ExtractToDirectoryHelper(archiveFilePath, folderPath, progress, cancelToken);
+            return Task.Run(() => ExtractToDirectoryHelper(archiveFilePath, destFolderPath, progress, token));
         }
 
-        private static Task CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, IProgress<float> progress, CancellationToken cancelToken)
+        private static void CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, Action<float> progress,
+                                                      CancellationToken token)
         {
             sourcePath = Path.GetFullPath(sourcePath);
             archiveFilePath = Path.GetFullPath(archiveFilePath);
 
-            var folderSeparators = new char[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+            var folderSeparators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+            var directoryInfo = new DirectoryInfo(sourcePath);
 
-            return Task.Run(() =>
-            {
-                using (var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Create, Encoding.UTF8))
-                {
-                    var directoryInfo = new DirectoryInfo(sourcePath);
+            // this code results in two run-throughs of the source folder, but
+            // because of file system caching, the second run-through will be much faster than the first
+            var totalBytes = directoryInfo.EnumAllFiles().Sum(fi => fi.Length);
+            token.ThrowIfCancellationRequested();
 
-                    // this code results in two run-throughs of the source folder, but
-                    // because of windows file system caching, the second run-through below, 
-                    // will be much faster than the first
-                    var totalBytes = directoryInfo
-                        .EnumerateFiles("*", SearchOption.AllDirectories)
-                        .Sum(fi => fi.Length);
-                    var currentBytes = 0L;
-                    cancelToken.ThrowIfCancellationRequested();
-                    foreach (var info in directoryInfo.EnumerateFileSystemInfos("*", SearchOption.AllDirectories))
-                    {
-                        cancelToken.ThrowIfCancellationRequested();
-
-                        int length = info.FullName.Length - sourcePath.Length;
-                        var entryName = info.FullName.Substring(sourcePath.Length, length).TrimStart(folderSeparators);
-                        if (info is FileInfo)
-                        {
-                            var sourceInfo = (FileInfo)info;
-                            using (var source = sourceInfo.OpenRead())
-                            {
-                                var entry = zipArchive.CreateEntry(entryName);
-                                entry.LastWriteTime = sourceInfo.GetLastWriteTime();
-                                using (var destination = entry.Open())
-                                {
-                                    currentBytes += StreamCopyHelper(source, destination, progress, totalBytes, currentBytes, cancelToken);
-                                }
-                            }
-                        }
-                        else if (info is DirectoryInfo)
-                        {
-                            if (IsFolderEmpty(info.FullName))
-                            {
-                                // create entry for empty folder
-                                zipArchive.CreateEntry(string.Concat(entryName, Path.DirectorySeparatorChar));
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        private static Task ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath, IProgress<float> progress, CancellationToken cancelToken)
-        {
-            var destRootPath = Path.GetFullPath(destFolderPath);
-
-            return Task.Run(() =>
-            {
-                cancelToken.ThrowIfCancellationRequested();
-
-                using (var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Read, Encoding.UTF8))
-                {
-                    var currentBytes = 0L;
-
-                    // inital run through of the directory, getting the total number of bytes to extract
-                    var totalBytes = zipArchive.Entries.Sum(entry => entry.Length);
-
-                    // second run through, actually extracting entries
-                    foreach (var entry in zipArchive.Entries)
-                    {
-                        cancelToken.ThrowIfCancellationRequested();
-
-                        var destPath = Path.Combine(destRootPath, entry.FullName);
-                        // file or directory?
-                        if (Path.GetFileName(destPath).Length != 0)
-                        {
-                            // it's a file, so create its containing folder(s) ...
-                            Directory.CreateDirectory(Path.GetDirectoryName(destPath));
-                            // ... and extract it
-                            using (var dest = File.Open(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                            using (var source = entry.Open())
-                            {
-                                currentBytes += StreamCopyHelper(source, dest, progress, totalBytes, currentBytes, cancelToken);
-                            }
-                            File.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
-                        }
-                        else
-                        {
-                            // it's an empty directory, so simply create it
-                            Directory.CreateDirectory(destPath);
-                            Directory.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
-                        }
-                    }
-                }
-            });
-        }
-
-        private static long StreamCopyHelper(Stream source, Stream destination, IProgress<float> progress, long totalBytes, long currentBytes, CancellationToken cancelToken)
-        {
             const int BUFFER_SIZE = 81920; // just below the LOH threshold
             var buffer = new byte[BUFFER_SIZE];
+
+            var currentBytes = 0L;
+            using var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Create, Encoding.UTF8);
+            foreach (var info in directoryInfo.EnumAllEntries())
+            {
+                token.ThrowIfCancellationRequested();
+
+                int length = info.FullName.Length - sourcePath.Length;
+                var entryName = info.FullName.Substring(sourcePath.Length, length).TrimStart(folderSeparators);
+                if (info is FileInfo sourceInfo)
+                {
+                    using var source = sourceInfo.OpenRead();
+                    var entry = zipArchive.CreateEntry(entryName);
+                    entry.LastWriteTime = sourceInfo.GetLastWriteTime();
+                    using var destination = entry.Open();
+                    currentBytes += StreamCopyHelper(source, destination, buffer, progress, totalBytes, currentBytes,
+                                                     token);
+                }
+                else if (info is DirectoryInfo dirInfo && dirInfo.IsEmpty())
+                {
+                    // create entry for empty folder
+                    zipArchive.CreateEntry(string.Concat(entryName, Path.DirectorySeparatorChar));
+                }
+            }
+        }
+
+        private static void ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath,
+                                                     Action<float> progress, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+
+            using var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Read, Encoding.UTF8);
+            var currentBytes = 0L;
+
+            // initial run through of the directory, getting the total number of bytes to extract
+            var totalBytes = zipArchive.Entries.Sum(entry => entry.Length);
+            const int BUFFER_SIZE = 81920; // just below the LOH threshold
+            var buffer = new byte[BUFFER_SIZE];
+
+            // second run through, actually extracting entries
+            foreach (var entry in zipArchive.Entries)
+            {
+                token.ThrowIfCancellationRequested();
+
+                var destPath = Path.Combine(Path.GetFullPath(destFolderPath), entry.FullName);
+                // file or directory?
+                if (Path.GetFileName(destPath).Length != 0)
+                {
+                    // it's a file, so create its containing folder(s) ...
+                    Directory.CreateDirectory(Path.GetDirectoryName(destPath));
+                    // ... and extract it
+                    using (var dest = File.Open(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    using (var source = entry.Open())
+                    {
+                        currentBytes += StreamCopyHelper(source, dest, buffer, progress, totalBytes, currentBytes, token);
+                    }
+                    File.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
+                }
+                else
+                {
+                    // it's an empty directory, so simply create it
+                    Directory.CreateDirectory(destPath);
+                    Directory.SetLastWriteTime(destPath, entry.LastWriteTime.DateTime);
+                }
+            }
+        }
+
+        private static long StreamCopyHelper(Stream source, Stream destination, byte[] buffer, Action<float> progress,
+                                             long totalBytes, long currentBytes, CancellationToken token)
+        {
             var totalCopied = 0L;
-            var bytesRead = source.Read(buffer, 0, BUFFER_SIZE);
+            var bytesRead = source.Read(buffer, 0, buffer.Length);
             while (bytesRead > 0)
             {
-                cancelToken.ThrowIfCancellationRequested();
+                token.ThrowIfCancellationRequested();
                 destination.Write(buffer, 0, bytesRead);
 
                 totalCopied += bytesRead;
-                if (progress != null)
-                {
-                    progress.Report((currentBytes + totalCopied) / (float)totalBytes);
-                }
+                progress?.Invoke((currentBytes + totalCopied) / (float)totalBytes);
 
-                cancelToken.ThrowIfCancellationRequested();
-                bytesRead = source.Read(buffer, 0, BUFFER_SIZE);
+                token.ThrowIfCancellationRequested();
+                bytesRead = source.Read(buffer, 0, buffer.Length);
             }
 
             return totalCopied;
         }
 
-        private static DateTimeOffset GetLastWriteTime(this FileInfo fileInfo)
-        {
-            var lastWriteTime = new DateTimeOffset(fileInfo.LastWriteTimeUtc, TimeSpan.Zero);
-            if (lastWriteTime.Year < 1980 || lastWriteTime.Year > 2107)
-            {
-                return new DateTimeOffset(1980, 1, 1, 0, 0, 0, TimeSpan.Zero);
-            }
-            return lastWriteTime;
-        }
-
-        private static bool IsFolderEmpty(string folderPath)
-        {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(folderPath, "*"))
-            {
-                return false;
-            }
-            return true;
-        }
     }
 }

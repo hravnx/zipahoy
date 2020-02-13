@@ -1,19 +1,19 @@
 ﻿using System;
 using System.IO;
-using System.Threading;
+using Helpers;
+
 
 namespace ZipAhoy.Tests
 {
+    using static ActionHelper;
+
     public class TempFolder : IDisposable
     {
         public string FullPath { get; private set; }
 
         public TempFolder(string prefix)
         {
-            if(String.IsNullOrWhiteSpace(prefix))
-            {
-                throw new ArgumentNullException("prefix");
-            }
+            Require.IsNotBlank(prefix, nameof(prefix));
 
             var folderName = Guid.NewGuid().ToString("D");
             FullPath = Path.Combine(Path.GetTempPath(), prefix + folderName);
@@ -24,28 +24,11 @@ namespace ZipAhoy.Tests
         {
             var fullPath = Path.GetFullPath(Path.Combine(FullPath, relativePath));
             Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
-
             FileUtils.CreateDummyFile(fullPath, size);
         }
 
-        public void Dispose()
-        {
-            // allow for retries, if the file system is still 
-            // holding on to files in here
-            for (int i = 0; i < 10; ++i)
-            {
-                try
-                {
-                    Directory.Delete(FullPath, true);
-                    return;
-                }
-                catch (IOException)
-                {
-                    Thread.Sleep(10);
-                }
-            }
-        }
-
+        public void Dispose() =>
+            Run(() => Directory.Delete(FullPath, true)).WithRetriesOn<IOException>();
 
     }
 }
