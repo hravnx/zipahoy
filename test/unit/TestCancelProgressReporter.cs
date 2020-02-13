@@ -16,7 +16,8 @@ namespace ZipAhoy.Tests
             this.tokenSource = tokenSource;
         }
 
-        public static implicit operator Action<float>(TestCancelProgressReporter reporter) => pct => reporter.Report(pct);
+        public static implicit operator Action<float>(TestCancelProgressReporter reporter)
+            => pct => reporter.Report(pct);
 
         public void Report(float value)
         {

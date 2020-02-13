@@ -86,13 +86,8 @@ namespace ZipAhoy.Tests
 
         private static long GetLength(string pathName)
         {
-
             var isDir = (File.GetAttributes(pathName) & FileAttributes.Directory) == FileAttributes.Directory;
-            if (isDir)
-            {
-                return -1;
-            }
-            return (new FileInfo(pathName)).Length;
+            return isDir ? -1 : (new FileInfo(pathName)).Length;
         }
     }
 }

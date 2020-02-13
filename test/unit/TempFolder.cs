@@ -1,10 +1,9 @@
 ﻿using System;
 using System.IO;
-using Helpers;
-
 
 namespace ZipAhoy.Tests
 {
+    using Helpers;
     using static ActionHelper;
 
     public class TempFolder : IDisposable

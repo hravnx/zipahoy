@@ -17,7 +17,6 @@ namespace ZipAhoy.Tests
             ReportedProgress.Add(value);
         }
 
-
         public static implicit operator Action<float>(TestProgressReporter reporter) => pct => reporter.Report(pct);
 
     }
