@@ -1,16 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace ZipAhoy.Tests
 {
     public class TestCancelProgressReporter : IProgress<float>
     {
-        CancellationTokenSource tokenSource;
-        int cancelAfterReports;
+        readonly CancellationTokenSource tokenSource;
+        readonly int cancelAfterReports;
 
         public int ReportCount { get; private set; }
 
@@ -19,9 +15,13 @@ namespace ZipAhoy.Tests
             this.cancelAfterReports = cancelAfterReports;
             this.tokenSource = tokenSource;
         }
+
+        public static implicit operator Action<float>(TestCancelProgressReporter reporter)
+            => pct => reporter.Report(pct);
+
         public void Report(float value)
         {
-            if(++ReportCount >= cancelAfterReports)
+            if (++ReportCount >= cancelAfterReports)
             {
                 tokenSource.Cancel();
             }
