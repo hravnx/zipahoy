@@ -9,6 +9,9 @@
 .ionide/
 .vs/
 
+*.nupkg
+*.snupkg
+
 # Build results
 
 [Dd]ebug/

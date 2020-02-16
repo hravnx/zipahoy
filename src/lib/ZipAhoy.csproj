@@ -2,8 +2,19 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <ReleaseVersion>0.3</ReleaseVersion>
     <LangVersion>8.0</LangVersion>
+    <PackageId>ZipAhoy</PackageId>
+    <Version>0.3.0</Version>
+    <Title>ZipAhoy</Title>
+    <Description>Zip Ahoy is a small NetStandard 2.0 library for creating/extracting directories to/from zip-files, with progress reporting and cancellation support.</Description>
+    <Authors>Henrik Ravn</Authors>
+    <Copyright>(c) 2014-2020 Henrik Ravn</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>zip;compression;progress;async</PackageTags>
+    <IncludeSymbols>true</IncludeSymbols>
+    <IncludeSource>true</IncludeSource>
+    <RepositoryUrl>https://github.com/hravnx/zipahoy</RepositoryUrl>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
 </Project>

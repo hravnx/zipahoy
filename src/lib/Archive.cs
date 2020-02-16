@@ -108,8 +108,8 @@ namespace ZipAhoy
             foreach (var entry in zipArchive.Entries)
             {
                 token.ThrowIfCancellationRequested();
-
                 var destPath = Path.Combine(Path.GetFullPath(destFolderPath), entry.FullName);
+
                 // file or directory?
                 if (Path.GetFileName(destPath).Length != 0)
                 {
