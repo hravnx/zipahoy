@@ -53,3 +53,49 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: '**/TestResults/*.trx'
           if-no-files-found: error
+
+  # the package is platform independent, so it is built once rather than per matrix leg, and
+  # only once the tests have passed on all of them
+  pack:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Pack
+        run: dotnet pack src/lib/ZipAhoy.csproj --configuration Release -warnaserror --output artifacts
+
+      # packing succeeds even if a target framework silently stops being included, so the
+      # things consumers actually depend on are asserted rather than assumed
+      - name: Check package contents
+        run: |
+          package=$(ls artifacts/*.nupkg)
+          echo "inspecting $package"
+          contents=$(unzip -Z1 "$package")
+          echo "$contents"
+          missing=0
+          for expected in \
+            lib/netstandard2.0/ZipAhoy.dll \
+            lib/netstandard2.0/ZipAhoy.xml \
+            lib/net10.0/ZipAhoy.dll \
+            lib/net10.0/ZipAhoy.xml \
+            README.md
+          do
+            if ! printf '%s\n' "$contents" | grep -qxF "$expected"; then
+              echo "::error::package is missing $expected"
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: nuget-package
+          path: artifacts/*
+          if-no-files-found: error

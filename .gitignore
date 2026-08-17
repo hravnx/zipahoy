@@ -12,6 +12,9 @@
 *.nupkg
 *.snupkg
 
+# where dotnet pack puts its output, both locally and on CI
+artifacts/
+
 # Build results
 
 [Dd]ebug/
