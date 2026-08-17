@@ -21,17 +21,19 @@ namespace ZipAhoy
         /// </summary>
         /// <param name="folderPath">The directory to zip</param>
         /// <param name="archiveFilePath">The path of the resulting zip archive</param>
-        /// <param name="progress">Optional progress action</param>
+        /// <param name="progress">Optional progress action, called on a thread pool thread</param>
         /// <param name="token">Optional cancellation token</param>
         /// <returns>Nothing</returns>
         public static Task CreateFromFolderAsync(string folderPath, string archiveFilePath,
                                                  Action<float>? progress = null, CancellationToken token = default)
         {
+            // validated up front rather than inside the async method below, so that a caller passing
+            // nonsense gets told about it right away instead of on the first await
             Require.IsNotBlank(folderPath, nameof(folderPath));
             Require.IsNotBlank(archiveFilePath, nameof(archiveFilePath));
             Require.FolderExists(folderPath, nameof(folderPath));
 
-            return Task.Run(() => CreateFromDirectoryHelper(folderPath, archiveFilePath, progress, token), token);
+            return CreateFromDirectoryAsync(folderPath, archiveFilePath, progress, token);
         }
 
         /// <summary>
@@ -39,7 +41,7 @@ namespace ZipAhoy
         /// </summary>
         /// <param name="archiveFilePath">The zip archive to unzip</param>
         /// <param name="destFolderPath">The folder to unpack the zip file in</param>
-        /// <param name="progress">Optional progress action</param>
+        /// <param name="progress">Optional progress action, called on a thread pool thread</param>
         /// <param name="token">Optional cancellation token</param>
         /// <returns>Nothing</returns>
         /// <exception cref="InvalidDataException">
@@ -53,80 +55,141 @@ namespace ZipAhoy
             Require.IsNotBlank(destFolderPath, nameof(destFolderPath));
             Require.FileExists(archiveFilePath, nameof(archiveFilePath));
 
-            return Task.Run(() => ExtractToDirectoryHelper(archiveFilePath, destFolderPath, progress, token), token);
+            return ExtractToDirectoryAsync(archiveFilePath, destFolderPath, progress, token);
         }
 
-        private static void CreateFromDirectoryHelper(string sourcePath, string archiveFilePath, Action<float>? progress,
-                                                      CancellationToken token)
+        private static async Task CreateFromDirectoryAsync(string sourcePath, string archiveFilePath,
+                                                           Action<float>? progress, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+
             sourcePath = Path.GetFullPath(sourcePath);
             archiveFilePath = Path.GetFullPath(archiveFilePath);
 
-            var folderSeparators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
             var directoryInfo = new DirectoryInfo(sourcePath);
 
-            // this code results in two run-throughs of the source folder, but
-            // because of file system caching, the second run-through will be much faster than the first
+            // the folder is walked twice - once to size up the work for progress reporting, and once to
+            // do it. The BCL has no asynchronous directory enumeration, so this walk is synchronous, but
+            // it only reads metadata; file contents are never touched here.
             var totalBytes = directoryInfo.EnumAllFiles().Sum(fi => fi.Length);
             token.ThrowIfCancellationRequested();
 
-            var buffer = new byte[BufferSize];
-            var currentBytes = 0L;
-
+            // opened before the cleanup handler below on purpose: if this throws because the archive
+            // already exists, that file is not ours to delete
+            var fileStream = OpenArchiveForWriting(archiveFilePath);
+            var failed = false;
             try
             {
-                using (var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Create, Encoding.UTF8))
+                var zipArchive = await OpenArchiveAsync(fileStream, ZipArchiveMode.Create, token).ConfigureAwait(false);
+                try
                 {
-                    foreach (var info in directoryInfo.EnumAllEntries())
-                    {
-                        token.ThrowIfCancellationRequested();
-
-                        int length = info.FullName.Length - sourcePath.Length;
-                        var entryName = info.FullName.Substring(sourcePath.Length, length)
-                                                     .TrimStart(folderSeparators)
-                                                     // the zip format mandates '/' as the separator
-                                                     // (APPNOTE 4.4.17.1), so archives written on Windows
-                                                     // stay readable everywhere else
-                                                     .Replace(Path.DirectorySeparatorChar, '/');
-                        if (info is FileInfo sourceInfo)
-                        {
-                            using var source = sourceInfo.OpenRead();
-                            var entry = zipArchive.CreateEntry(entryName);
-                            entry.LastWriteTime = sourceInfo.GetLastWriteTime();
-                            using var destination = entry.Open();
-                            currentBytes += StreamCopyHelper(source, destination, buffer, progress, totalBytes,
-                                                             currentBytes, token);
-                        }
-                        else if (info is DirectoryInfo dirInfo && dirInfo.IsEmpty())
-                        {
-                            // create entry for empty folder
-                            zipArchive.CreateEntry(entryName + "/");
-                        }
-                    }
+                    await WriteEntriesAsync(zipArchive, directoryInfo, sourcePath, totalBytes, progress, token)
+                        .ConfigureAwait(false);
+                }
+                finally
+                {
+                    // disposing the archive writes the central directory
+                    await DisposeAsync(zipArchive).ConfigureAwait(false);
                 }
             }
             catch
             {
-                // the archive is only half-written at this point, and a truncated zip file is
-                // indistinguishable from a finished one to a caller that just checks for existence
-                TryDelete(archiveFilePath);
+                failed = true;
                 throw;
+            }
+            finally
+            {
+                await DisposeAsync(fileStream).ConfigureAwait(false);
+                if (failed)
+                {
+                    // a truncated zip file is indistinguishable from a finished one to a caller that
+                    // just checks whether the archive is there
+                    TryDelete(archiveFilePath);
+                }
             }
         }
 
-        private static void ExtractToDirectoryHelper(string archiveFilePath, string destFolderPath,
-                                                     Action<float>? progress, CancellationToken token)
+        private static async Task WriteEntriesAsync(ZipArchive zipArchive, DirectoryInfo directoryInfo,
+                                                    string sourcePath, long totalBytes, Action<float>? progress,
+                                                    CancellationToken token)
+        {
+            var folderSeparators = new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar };
+            var buffer = new byte[BufferSize];
+            var currentBytes = 0L;
+
+            foreach (var info in directoryInfo.EnumAllEntries())
+            {
+                token.ThrowIfCancellationRequested();
+
+                int length = info.FullName.Length - sourcePath.Length;
+                var entryName = info.FullName.Substring(sourcePath.Length, length)
+                                             .TrimStart(folderSeparators)
+                                             // the zip format mandates '/' as the separator
+                                             // (APPNOTE 4.4.17.1), so archives written on Windows
+                                             // stay readable everywhere else
+                                             .Replace(Path.DirectorySeparatorChar, '/');
+                if (info is FileInfo sourceInfo)
+                {
+                    var entry = zipArchive.CreateEntry(entryName);
+                    entry.LastWriteTime = sourceInfo.GetLastWriteTime();
+                    currentBytes += await WriteEntryAsync(sourceInfo, entry, buffer, progress, totalBytes,
+                                                          currentBytes, token).ConfigureAwait(false);
+                }
+                else if (info is DirectoryInfo dirInfo && dirInfo.IsEmpty())
+                {
+                    // create entry for empty folder
+                    zipArchive.CreateEntry(entryName + "/");
+                }
+            }
+        }
+
+        private static async Task<long> WriteEntryAsync(FileInfo sourceInfo, ZipArchiveEntry entry, byte[] buffer,
+                                                        Action<float>? progress, long totalBytes, long currentBytes,
+                                                        CancellationToken token)
+        {
+            // the source is only read from, so there is nothing to flush on the way out
+            using var source = OpenFileForReading(sourceInfo.FullName);
+
+            var destination = await OpenEntryAsync(entry, token).ConfigureAwait(false);
+            try
+            {
+                return await CopyStreamAsync(source, destination, buffer, progress, totalBytes, currentBytes, token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                await DisposeAsync(destination).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task ExtractToDirectoryAsync(string archiveFilePath, string destFolderPath,
+                                                          Action<float>? progress, CancellationToken token)
         {
             token.ThrowIfCancellationRequested();
 
             var destRootPath = Directory.CreateDirectory(destFolderPath).FullName;
 
-            using var zipArchive = ZipFile.Open(archiveFilePath, ZipArchiveMode.Read, Encoding.UTF8);
+            using var fileStream = OpenFileForReading(archiveFilePath);
+
+            var zipArchive = await OpenArchiveAsync(fileStream, ZipArchiveMode.Read, token).ConfigureAwait(false);
+            try
+            {
+                await ExtractEntriesAsync(zipArchive, destRootPath, progress, token).ConfigureAwait(false);
+            }
+            finally
+            {
+                await DisposeAsync(zipArchive).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task ExtractEntriesAsync(ZipArchive zipArchive, string destRootPath,
+                                                      Action<float>? progress, CancellationToken token)
+        {
+            var buffer = new byte[BufferSize];
             var currentBytes = 0L;
 
-            // initial run through of the directory, getting the total number of bytes to extract
+            // initial run through of the archive, getting the total number of bytes to extract
             var totalBytes = zipArchive.Entries.Sum(entry => entry.Length);
-            var buffer = new byte[BufferSize];
 
             // second run through, actually extracting entries
             foreach (var entry in zipArchive.Entries)
@@ -150,14 +213,104 @@ namespace ZipAhoy
                         Directory.CreateDirectory(parentPath!);
                     }
                     // ... and extract it
-                    using (var dest = File.Open(destPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    using (var source = entry.Open())
-                    {
-                        currentBytes += StreamCopyHelper(source, dest, buffer, progress, totalBytes, currentBytes, token);
-                    }
+                    currentBytes += await ExtractEntryAsync(entry, destPath, buffer, progress, totalBytes,
+                                                            currentBytes, token).ConfigureAwait(false);
                     File.SetLastWriteTimeUtc(destPath, ToUtc(entry.LastWriteTime));
                 }
             }
+        }
+
+        private static async Task<long> ExtractEntryAsync(ZipArchiveEntry entry, string destPath, byte[] buffer,
+                                                          Action<float>? progress, long totalBytes, long currentBytes,
+                                                          CancellationToken token)
+        {
+            // the entry is only read from, so there is nothing to flush on the way out
+            using var source = await OpenEntryAsync(entry, token).ConfigureAwait(false);
+
+            var destination = OpenFileForWriting(destPath);
+            try
+            {
+                return await CopyStreamAsync(source, destination, buffer, progress, totalBytes, currentBytes, token)
+                    .ConfigureAwait(false);
+            }
+            finally
+            {
+                // the write stream flushes on the way out, so let that happen asynchronously as well
+                await DisposeAsync(destination).ConfigureAwait(false);
+            }
+        }
+
+        private static async Task<long> CopyStreamAsync(Stream source, Stream destination, byte[] buffer,
+                                                        Action<float>? progress, long totalBytes, long currentBytes,
+                                                        CancellationToken token)
+        {
+            var totalCopied = 0L;
+            var bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false);
+            while (bytesRead > 0)
+            {
+                await destination.WriteAsync(buffer, 0, bytesRead, token).ConfigureAwait(false);
+
+                totalCopied += bytesRead;
+                progress?.Invoke((currentBytes + totalCopied) / (float)totalBytes);
+
+                // checked explicitly rather than left to the token on the next read, so that cancelling
+                // from inside the progress callback takes effect before any more of the file is copied
+                token.ThrowIfCancellationRequested();
+                bytesRead = await source.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false);
+            }
+
+            return totalCopied;
+        }
+
+        private static FileStream OpenFileForReading(string path) =>
+            new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+
+        private static FileStream OpenFileForWriting(string path) =>
+            new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
+
+        /// <summary>
+        /// <see cref="FileMode.CreateNew"/> matches what <see cref="ZipFile"/> does for
+        /// <see cref="ZipArchiveMode.Create"/>: writing an archive over an existing file is an error
+        /// rather than a silent overwrite.
+        /// </summary>
+        private static FileStream OpenArchiveForWriting(string path) =>
+            new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None, BufferSize, useAsync: true);
+
+        /// <summary>
+        /// .NET 10 can read and write an archive's central directory without blocking; netstandard2.0 has
+        /// no such API and falls back to the synchronous constructor. Entry contents - the bulk of the
+        /// work by far - are transferred asynchronously either way.
+        /// </summary>
+        private static Task<ZipArchive> OpenArchiveAsync(Stream stream, ZipArchiveMode mode, CancellationToken token)
+        {
+#if NET10_0_OR_GREATER
+            return ZipArchive.CreateAsync(stream, mode, leaveOpen: true, Encoding.UTF8, token);
+#else
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(new ZipArchive(stream, mode, leaveOpen: true, Encoding.UTF8));
+#endif
+        }
+
+        private static Task<Stream> OpenEntryAsync(ZipArchiveEntry entry, CancellationToken token)
+        {
+#if NET10_0_OR_GREATER
+            return entry.OpenAsync(token);
+#else
+            token.ThrowIfCancellationRequested();
+            return Task.FromResult(entry.Open());
+#endif
+        }
+
+        private static Task DisposeAsync(IDisposable disposable)
+        {
+#if NET10_0_OR_GREATER
+            if (disposable is IAsyncDisposable asyncDisposable)
+            {
+                return asyncDisposable.DisposeAsync().AsTask();
+            }
+#endif
+            disposable.Dispose();
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -216,26 +369,6 @@ namespace ZipAhoy
             catch (UnauthorizedAccessException)
             {
             }
-        }
-
-        private static long StreamCopyHelper(Stream source, Stream destination, byte[] buffer, Action<float>? progress,
-                                             long totalBytes, long currentBytes, CancellationToken token)
-        {
-            var totalCopied = 0L;
-            var bytesRead = source.Read(buffer, 0, buffer.Length);
-            while (bytesRead > 0)
-            {
-                token.ThrowIfCancellationRequested();
-                destination.Write(buffer, 0, bytesRead);
-
-                totalCopied += bytesRead;
-                progress?.Invoke((currentBytes + totalCopied) / (float)totalBytes);
-
-                token.ThrowIfCancellationRequested();
-                bytesRead = source.Read(buffer, 0, buffer.Length);
-            }
-
-            return totalCopied;
         }
 
     }

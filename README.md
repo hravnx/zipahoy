@@ -29,6 +29,10 @@ Archive.ExtractToFolderAsync(
 `ExtractToFolderAsync` creates the destination folder if it does not already exist, and throws
 `InvalidDataException` if the archive contains an entry that would be written outside of it.
 
+Both methods do real asynchronous I/O rather than wrapping synchronous work in `Task.Run`, so they
+don't occupy a thread while a large archive is being read or written. Progress callbacks arrive on a
+thread pool thread, so marshal to your UI thread if you need to update anything from them.
+
 ### Examples
 There are usage examples in the ZipAhoy.Tests project.
 

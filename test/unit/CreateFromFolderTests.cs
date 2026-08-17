@@ -103,10 +103,10 @@ namespace ZipAhoy.Tests
             tempFolder.CreateDummyFile("dummy.bin", 234);
 
             var task = Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, cts.Token);
-            await Assert.ThrowsAsync<TaskCanceledException>(() => task);
+            await Assert.ThrowsAsync<OperationCanceledException>(() => task);
 
-            // the token is forwarded to Task.Run, so the operation lands in Canceled rather than
-            // Faulted, and the source folder is never scanned
+            // cancelling lands the operation in Canceled rather than Faulted, and bails before the
+            // source folder is walked
             Assert.True(task.IsCanceled);
             Assert.False(zipFile.GetInfo().Exists);
         }
