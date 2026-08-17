@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
-namespace Helpers
+namespace ZipAhoy.Internal
 {
 
-    public static class Require
+    internal static class Require
     {
-        public static void IsNotBlank(string s, string nameOfArg)
+        public static void IsNotBlank(string? s, string nameOfArg)
         {
             if (string.IsNullOrWhiteSpace(s))
             {
@@ -20,7 +20,7 @@ namespace Helpers
         {
             if (!Directory.Exists(folderPath))
             {
-                throw new ArgumentException($"Folder '{nameOfArg}' does not exist", nameOfArg);
+                throw new ArgumentException($"Folder '{folderPath}' does not exist", nameOfArg);
             }
         }
 
@@ -28,22 +28,16 @@ namespace Helpers
         {
             if (!File.Exists(filePath))
             {
-                throw new ArgumentException($"File '{nameOfArg}' does not exist", nameOfArg);
+                throw new ArgumentException($"File '{filePath}' does not exist", nameOfArg);
             }
         }
     }
 
-    public static class FileSystemHelpers
+    internal static class FileSystemHelpers
     {
         public static bool IsEmpty(this DirectoryInfo dirInfo)
         {
             return !dirInfo.EnumerateFileSystemInfos().Any();
-        }
-
-        public static bool IsEmptyDirectory(this string directoryPath)
-        {
-            Require.IsNotBlank(directoryPath, nameof(directoryPath));
-            return !Directory.EnumerateFileSystemEntries(directoryPath, "*").Any();
         }
 
         public static IEnumerable<FileInfo> EnumAllFiles(this DirectoryInfo dirInfo)

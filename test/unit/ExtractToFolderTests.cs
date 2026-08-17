@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,14 +12,14 @@ namespace ZipAhoy.Tests
     {
         [Theory]
         [InlineData(null), InlineData(""), InlineData("    \t   ")]
-        public async Task Extract_with_bad_arguments_throws(string arg)
+        public async Task Extract_with_bad_arguments_throws(string? arg)
         {
             var ex = await Assert.ThrowsAsync<ArgumentNullException>(
-                () => Archive.ExtractToFolderAsync(arg, "some stuff", null, CancellationToken.None));
+                () => Archive.ExtractToFolderAsync(arg!, "some stuff", null, CancellationToken.None));
             Assert.Equal("archiveFilePath", ex.ParamName);
 
             ex = await Assert.ThrowsAsync<ArgumentNullException>(
-                () => Archive.ExtractToFolderAsync("well.zip", arg, null, CancellationToken.None));
+                () => Archive.ExtractToFolderAsync("well.zip", arg!, null, CancellationToken.None));
             Assert.Equal("destFolderPath", ex.ParamName);
         }
 
@@ -107,6 +108,80 @@ namespace ZipAhoy.Tests
                                             cts.Token));
 
             Assert.Equal(2, progress.ReportCount);
+        }
+
+        [Fact]
+        public async Task Extract_creates_the_destination_folder_if_it_is_missing()
+        {
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            using var tempFolder = "zip-".CreateTempFolder();
+            tempFolder.CreateDummyFile("dummy.bin", 234);
+            await Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
+
+            using var destRoot = "zip-".CreateTempFolder();
+            var destFolder = Path.Combine(destRoot.FullPath, "nested", "output");
+
+            await Archive.ExtractToFolderAsync(zipFile.FilePath, destFolder, null, CancellationToken.None);
+
+            Assert.True(File.Exists(Path.Combine(destFolder, "dummy.bin")));
+        }
+
+        [Fact]
+        public async Task Extract_rejects_entries_pointing_outside_the_dest_folder()
+        {
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            using (var archive = ZipFile.Open(zipFile.FilePath, ZipArchiveMode.Create))
+            {
+                using var stream = archive.CreateEntry("../pwned.txt").Open();
+                stream.Write(new byte[] { 1, 2, 3 }, 0, 3);
+            }
+
+            using var destRoot = "zip-".CreateTempFolder();
+            var destFolder = Path.Combine(destRoot.FullPath, "sub");
+
+            await Assert.ThrowsAsync<InvalidDataException>(
+                () => Archive.ExtractToFolderAsync(zipFile.FilePath, destFolder, null, CancellationToken.None));
+
+            Assert.False(File.Exists(Path.Combine(destRoot.FullPath, "pwned.txt")));
+        }
+
+        [Fact]
+        public async Task Extract_round_trips_file_timestamps_in_utc()
+        {
+            // a stamp that is not on a whole hour, so a local-vs-utc mixup can't accidentally match
+            var stamp = new DateTime(2020, 6, 15, 12, 34, 0, DateTimeKind.Utc);
+
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            using (var tempFolder = "zip-".CreateTempFolder())
+            {
+                tempFolder.CreateDummyFile("dummy.bin", 234);
+                File.SetLastWriteTimeUtc(Path.Combine(tempFolder.FullPath, "dummy.bin"), stamp);
+                await Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
+            }
+
+            using var destFolder = "zip-".CreateTempFolder();
+            await Archive.ExtractToFolderAsync(zipFile.FilePath, destFolder.FullPath, null, CancellationToken.None);
+
+            var extracted = File.GetLastWriteTimeUtc(Path.Combine(destFolder.FullPath, "dummy.bin"));
+
+            // zip timestamps have a 2 second resolution
+            Assert.Equal(stamp, extracted, TimeSpan.FromSeconds(2));
+        }
+
+        [Fact]
+        public async Task Extract_round_trips_empty_folders()
+        {
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            using (var tempFolder = "zip-".CreateTempFolder())
+            {
+                Directory.CreateDirectory(Path.Combine(tempFolder.FullPath, "emptydir"));
+                await Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
+            }
+
+            using var destFolder = "zip-".CreateTempFolder();
+            await Archive.ExtractToFolderAsync(zipFile.FilePath, destFolder.FullPath, null, CancellationToken.None);
+
+            Assert.True(Directory.Exists(Path.Combine(destFolder.FullPath, "emptydir")));
         }
     }
 }

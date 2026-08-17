@@ -1,20 +1,31 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <LangVersion>8.0</LangVersion>
+    <TargetFrameworks>netstandard2.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>ZipAhoy</PackageId>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Title>ZipAhoy</Title>
-    <Description>Zip Ahoy is a small NetStandard 2.0 library for creating/extracting directories to/from zip-files, with progress reporting and cancellation support.</Description>
+    <Description>Zip Ahoy is a small library for creating/extracting directories to/from zip-files, with progress reporting and cancellation support. Targets netstandard2.0 and net10.0.</Description>
     <Authors>Henrik Ravn</Authors>
-    <Copyright>(c) 2014-2020 Henrik Ravn</Copyright>
+    <Copyright>(c) 2014-2026 Henrik Ravn</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>zip;compression;progress;async</PackageTags>
-    <IncludeSymbols>true</IncludeSymbols>
-    <IncludeSource>true</IncludeSource>
     <RepositoryUrl>https://github.com/hravnx/zipahoy</RepositoryUrl>
+    <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- SourceLink ships in-box with the SDK, no package reference needed -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="ZipAhoy.Tests" />
+  </ItemGroup>
 
 </Project>

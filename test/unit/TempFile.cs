@@ -3,7 +3,7 @@ using System.IO;
 
 namespace ZipAhoy.Tests
 {
-    using Helpers;
+    using ZipAhoy.Internal;
     using static ActionHelper;
 
     public sealed class TempFile : IDisposable
@@ -15,8 +15,9 @@ namespace ZipAhoy.Tests
 
         private TempFile(string root, string prefix, string extension)
         {
-            var baseName = Path.Combine(root, prefix + Guid.NewGuid().ToString("D"));
-            FilePath = Path.ChangeExtension(baseName, extension);
+            // plain concatenation, not Path.ChangeExtension - the latter would truncate
+            // the generated name at the last '.' in the prefix
+            FilePath = Path.Combine(root, prefix + Guid.NewGuid().ToString("D") + extension);
         }
 
         /// <summary>

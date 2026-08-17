@@ -6,7 +6,7 @@ using Xunit;
 
 namespace ZipAhoy.Tests
 {
-    using Helpers;
+    using ZipAhoy.Internal;
 
     public static class ActionHelper
     {
@@ -21,7 +21,7 @@ namespace ZipAhoy.Tests
                     tryThis();
                     return;
                 }
-                catch (T)
+                catch (T) when (i < count - 1)
                 {
                     Thread.Sleep(10);
                 }
@@ -36,8 +36,7 @@ namespace ZipAhoy.Tests
         public static string GetTempFilename(string ext)
         {
             Require.IsNotBlank(ext, nameof(ext));
-            var basePath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D"));
-            return Path.ChangeExtension(basePath, ext);
+            return Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("D") + ext);
         }
 
         public static void CreateDummyFile(string filepath, int size)

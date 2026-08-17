@@ -1,5 +1,5 @@
 ## Zip Ahoy
-Zip Ahoy is a small NetStandard 2.0 library for creating/extracting directories to/from zip-files in C#.
+Zip Ahoy is a small library for creating/extracting directories to/from zip-files in C#. It targets `netstandard2.0` and `net10.0`.
 
 [![NuGet version (ZipAhoy)](https://img.shields.io/nuget/v/ZipAhoy.svg?style=flat-square)](https://www.nuget.org/packages/ZipAhoy/)
 
@@ -19,12 +19,19 @@ Archive.CreateFromFolderAsync(
 and
 
 ```csharp
-Arhive.ExtractToFolderAsync(
+Archive.ExtractToFolderAsync(
     string archiveFilePath, 
     string destFolderPath,
     Action<float> progress = default, 
     CancellationToken token = default)
 ```
+
+`ExtractToFolderAsync` creates the destination folder if it does not already exist, and throws
+`InvalidDataException` if the archive contains an entry that would be written outside of it.
+
+Both methods do real asynchronous I/O rather than wrapping synchronous work in `Task.Run`, so they
+don't occupy a thread while a large archive is being read or written. Progress callbacks arrive on a
+thread pool thread, so marshal to your UI thread if you need to update anything from them.
 
 ### Examples
 There are usage examples in the ZipAhoy.Tests project.

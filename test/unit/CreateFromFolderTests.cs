@@ -1,4 +1,6 @@
 ﻿using System;
+using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,14 +12,14 @@ namespace ZipAhoy.Tests
     {
         [Theory]
         [InlineData(null), InlineData(""), InlineData("   \t   ")]
-        public async Task Create_with_bad_arguments_throws(string arg)
+        public async Task Create_with_bad_arguments_throws(string? arg)
         {
             var ex = await Assert.ThrowsAsync<ArgumentNullException>(
-                () => Archive.CreateFromFolderAsync(arg, "well.zip", null, CancellationToken.None));
+                () => Archive.CreateFromFolderAsync(arg!, "well.zip", null, CancellationToken.None));
             Assert.Equal("folderPath", ex.ParamName);
 
             ex = await Assert.ThrowsAsync<ArgumentNullException>(
-                () => Archive.CreateFromFolderAsync("somestuff", arg, null, CancellationToken.None));
+                () => Archive.CreateFromFolderAsync("somestuff", arg!, null, CancellationToken.None));
             Assert.Equal("archiveFilePath", ex.ParamName);
         }
 
@@ -85,6 +87,59 @@ namespace ZipAhoy.Tests
                     Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, progress, cts.Token));
 
             Assert.Equal(2, progress.ReportCount);
+
+            // a half-written archive is indistinguishable from a finished one, so it must not be left behind
+            Assert.False(zipFile.GetInfo().Exists);
+        }
+
+        [Fact]
+        public async Task Create_with_an_already_cancelled_token_completes_as_cancelled()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            using var tempFolder = "zip-".CreateTempFolder();
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            tempFolder.CreateDummyFile("dummy.bin", 234);
+
+            var task = Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, cts.Token);
+            await Assert.ThrowsAsync<OperationCanceledException>(() => task);
+
+            // cancelling lands the operation in Canceled rather than Faulted, and bails before the
+            // source folder is walked
+            Assert.True(task.IsCanceled);
+            Assert.False(zipFile.GetInfo().Exists);
+        }
+
+        [Fact]
+        public async Task Create_validates_its_arguments_before_observing_the_token()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await Assert.ThrowsAsync<ArgumentNullException>(
+                () => Archive.CreateFromFolderAsync("", "well.zip", null, cts.Token));
+
+            var missing = FileUtils.GetTempFilename(".tmp");
+            await Assert.ThrowsAsync<ArgumentException>(
+                () => Archive.CreateFromFolderAsync(missing, "well.zip", null, cts.Token));
+        }
+
+        [Fact]
+        public async Task Create_uses_forward_slashes_in_entry_names()
+        {
+            using var tempFolder = "zip-".CreateTempFolder();
+            using var zipFile = TempFile.Create("zip-", ".zip");
+            tempFolder.CreateDummyFile("sub/dummy.bin", 234);
+            Directory.CreateDirectory(Path.Combine(tempFolder.FullPath, "emptydir"));
+
+            await Archive.CreateFromFolderAsync(tempFolder.FullPath, zipFile.FilePath, null, CancellationToken.None);
+
+            using var archive = ZipFile.OpenRead(zipFile.FilePath);
+            var names = archive.Entries.Select(e => e.FullName).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+
+            // the zip format mandates '/', regardless of the platform the archive was written on
+            Assert.Equal(new[] { "emptydir/", "sub/dummy.bin" }, names);
         }
 
     }
