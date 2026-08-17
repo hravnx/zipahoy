@@ -5,6 +5,9 @@ on:
     branches: [master]
   pull_request:
     branches: [master]
+  # called by release.yml, so publishing is gated on the same checks that guard master,
+  # and publishes the very package those checks ran against
+  workflow_call:
 
 permissions:
   contents: read
