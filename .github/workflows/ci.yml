@@ -36,11 +36,13 @@ jobs:
         run: dotnet restore ZipAhoy.sln
 
       - name: Build
-        run: dotnet build ZipAhoy.sln --configuration Release --no-restore
+        run: dotnet build ZipAhoy.sln --configuration Release --no-restore -warnaserror
 
+      # on windows this runs the suite twice, once per test target framework, so the trx name is
+      # left at its default - a fixed one would have the two runs overwrite each other
       - name: Test
         id: test
-        run: dotnet test ZipAhoy.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+        run: dotnet test ZipAhoy.sln --configuration Release --no-build --logger trx
 
       # uploaded on failure too - that is when the results are actually worth reading. Skipped
       # when the build never got as far as testing, so it can't fail for having nothing to upload.
