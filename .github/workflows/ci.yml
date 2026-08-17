@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+# a new push to a PR makes the in-flight run pointless, so drop it
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # the library special-cases path separators, so the tests are only meaningful
+    # if they run somewhere the separator is a backslash as well
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore ZipAhoy.sln
+
+      - name: Build
+        run: dotnet build ZipAhoy.sln --configuration Release --no-restore
+
+      - name: Test
+        id: test
+        run: dotnet test ZipAhoy.sln --configuration Release --no-build --logger "trx;LogFileName=test-results.trx"
+
+      # uploaded on failure too - that is when the results are actually worth reading. Skipped
+      # when the build never got as far as testing, so it can't fail for having nothing to upload.
+      - name: Upload test results
+        if: ${{ !cancelled() && steps.test.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ matrix.os }}
+          path: '**/TestResults/*.trx'
+          if-no-files-found: error
