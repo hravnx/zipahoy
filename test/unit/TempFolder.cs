@@ -3,7 +3,7 @@ using System.IO;
 
 namespace ZipAhoy.Tests
 {
-    using Helpers;
+    using ZipAhoy.Internal;
     using static ActionHelper;
 
     public class TempFolder : IDisposable
@@ -22,7 +22,7 @@ namespace ZipAhoy.Tests
         public void CreateDummyFile(string relativePath, int size)
         {
             var fullPath = Path.GetFullPath(Path.Combine(FullPath, relativePath));
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
             FileUtils.CreateDummyFile(fullPath, size);
         }
 
