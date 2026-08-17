@@ -21,9 +21,12 @@ namespace ZipAhoy
         /// </summary>
         /// <param name="folderPath">The directory to zip</param>
         /// <param name="archiveFilePath">The path of the resulting zip archive</param>
-        /// <param name="progress">Optional progress action, called on a thread pool thread</param>
+        /// <param name="progress">
+        /// Optional progress action, called with a fraction from 0.0 to 1.0. Not guaranteed to run on
+        /// any particular thread.
+        /// </param>
         /// <param name="token">Optional cancellation token</param>
-        /// <returns>Nothing</returns>
+        /// <returns>A task that completes once the archive has been written.</returns>
         public static Task CreateFromFolderAsync(string folderPath, string archiveFilePath,
                                                  Action<float>? progress = null, CancellationToken token = default)
         {
@@ -41,9 +44,12 @@ namespace ZipAhoy
         /// </summary>
         /// <param name="archiveFilePath">The zip archive to unzip</param>
         /// <param name="destFolderPath">The folder to unpack the zip file in</param>
-        /// <param name="progress">Optional progress action, called on a thread pool thread</param>
+        /// <param name="progress">
+        /// Optional progress action, called with a fraction from 0.0 to 1.0. Not guaranteed to run on
+        /// any particular thread.
+        /// </param>
         /// <param name="token">Optional cancellation token</param>
-        /// <returns>Nothing</returns>
+        /// <returns>A task that completes once the archive has been extracted.</returns>
         /// <exception cref="InvalidDataException">
         /// Thrown if the archive contains an entry that resolves to a path outside
         /// <paramref name="destFolderPath"/>.
