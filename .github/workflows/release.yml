@@ -1,0 +1,69 @@
+name: Release
+
+# Publishing lives in its own workflow rather than in ci.yml because the nuget.org trusted
+# publishing policy is bound to a workflow file name. Keeping it out of the workflow that runs
+# on every pull request means the trust boundary is a workflow that only ever runs on a tag.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    # bound to the trusted publishing policy, and the place to add a required reviewer if
+    # publishing should wait for a human
+    environment: release
+
+    permissions:
+      # required for the OIDC token - the request fails silently without it
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download the package built by the verify run
+        uses: actions/download-artifact@v8
+        with:
+          name: nuget-package
+          path: artifacts
+
+      # a tag that disagrees with the packed version would publish something nobody asked for
+      - name: Check the tag matches the packed version
+        run: |
+          set -euo pipefail
+          count=$(ls -1 artifacts/*.nupkg | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::expected exactly one .nupkg in the artifact, found $count"
+            exit 1
+          fi
+          package=$(ls artifacts/*.nupkg)
+          packed=$(basename "$package" .nupkg)
+          packed="${packed#ZipAhoy.}"
+          tag="${GITHUB_REF_NAME#v}"
+          echo "tag=$tag  packed=$packed"
+          if [ "$tag" != "$packed" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match packed version $packed"
+            exit 1
+          fi
+
+      # requested immediately before the push, since the key nuget.org hands back only lasts an hour
+      - name: NuGet login
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: hravnx
+
+      # pushes ZipAhoy.<version>.snupkg alongside the .nupkg automatically
+      - name: Push to nuget.org
+        run: >
+          dotnet nuget push artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
