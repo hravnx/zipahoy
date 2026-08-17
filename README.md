@@ -42,6 +42,28 @@ don't occupy a thread while a large archive is being read or written. Two things
 - `CreateFromFolderAsync` walks the source folder synchronously before its first `await`, to total up
   the bytes it is about to write. For a very large tree, don't call it directly on a UI thread.
 
+### Upgrading from 0.3.0
+The two methods keep their signatures, but some behaviour changed. In rough order of how likely you
+are to notice:
+
+- Extraction now rejects entries that resolve to a path outside the destination folder, with
+  `InvalidDataException`. An archive that relied on writing outside the folder it was extracted to
+  will stop working, which is the point.
+- `ExtractToFolderAsync` creates the destination folder when it is missing. Previously it threw
+  `ArgumentException`, so any workaround for that is no longer needed.
+- Entry names are written with `/` as the separator, as the zip format requires. Archives that 0.3.0
+  wrote on Windows used `\`, which other tools, and other platforms, read as part of the file name
+  rather than as a folder. Reading such an archive still works.
+- Timestamps survive a round-trip. 0.3.0 shifted them by the local UTC offset each time, so extracted
+  files will now carry different - correct - times than before.
+- Cancelling leaves the task in the `Canceled` state rather than `Faulted`, which matters if you
+  inspect `Task.Status` or `IsCanceled`. Awaiting still throws `OperationCanceledException`, as it did.
+  A cancelled or failed `CreateFromFolderAsync` also deletes its half-written archive instead of
+  leaving it behind.
+- The `Helpers` namespace is gone. It was public by accident and exported extension methods on
+  `DirectoryInfo` and `FileInfo`; if you were using `Require` or `FileSystemHelpers`, you now need your
+  own copy.
+
 ### Examples
 There are usage examples in the test project, under `test/unit`.
 
