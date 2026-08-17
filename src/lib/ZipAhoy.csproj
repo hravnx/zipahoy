@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>ZipAhoy</PackageId>
-    <Version>0.4.0</Version>
+    <Version>1.0.0</Version>
     <Title>ZipAhoy</Title>
     <Description>Zip Ahoy is a small library for creating/extracting directories to/from zip-files, with progress reporting and cancellation support. Targets netstandard2.0 and net10.0.</Description>
     <Authors>Henrik Ravn</Authors>
